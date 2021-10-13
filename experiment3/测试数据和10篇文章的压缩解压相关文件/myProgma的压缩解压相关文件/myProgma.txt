@@ -1,0 +1,961 @@
+#ifndef _HUFFMANNODE_H_
+#define _HUFFMANNODE_H_
+#pragma once
+//定义哈夫曼树结点
+#include<iostream>
+#include"myHeap.h"
+#include<fstream>
+#include<cstdio>
+
+using namespace std;
+
+/////////////////////////////////
+//接下来是HuffmanNode结构体的定义
+/////////////////////////////////
+struct HuffmanNode
+{
+	char key;//字母
+	int times;//出现的次数
+	string code;//该字符对应的编码
+	HuffmanNode* leftChild, * rightChild;
+	HuffmanNode* parent;
+	//缺省构造函数
+	HuffmanNode() :leftChild(NULL), rightChild(NULL), parent(NULL)
+	{
+		key = '\0';
+		times = 0;
+		code = "";
+	}
+	//参数构造函数
+	HuffmanNode(char c,int t=0, HuffmanNode* left = NULL, HuffmanNode* right = NULL,HuffmanNode*par=NULL)
+	{
+		key = c;
+		times = t;
+		leftChild = left;
+		rightChild = right;
+		parent = par;
+		code = "";
+	}
+	//重载<=运算符，排序依据是该符号出现的次数times
+	bool operator<=(HuffmanNode& R) { return times <= R.times; }
+	//重载>运算符，排序依据是该符号出现的次数times
+	bool operator>(HuffmanNode& R) { return times > R.times; }
+};
+
+
+
+//////////////////////////////
+//接下来是HuffmanTree类的定义
+//////////////////////////////
+
+class HuffmanTree
+{
+public:
+	HuffmanTree();
+	//析构函数，释放HuffmanTree的空间
+	~HuffmanTree() 
+	{
+		deleteTree(root);
+		delete[]times;
+		delete[]codes;
+		delete[]keys;
+	}
+	unsigned short *times;//数组，存储各字符出现的次数
+	int wpl;//总编码长度
+	short typeNum;//出现的字符种类数
+	string* codes;//字符串数组，用于存储每个字符的编码
+	char* keys;//字符数组，存储出现的字符
+	HuffmanNode* root;//根结点
+	//由已知数组生成HuffmanTree
+	void createTree(char keys[], unsigned short w[], int n);
+	//将两棵树合并成一棵
+	void mergeTree(HuffmanNode* bt1, HuffmanNode* bt2, HuffmanNode*& parent);
+	//将文件编码并将所得编码写入文件
+	void encoding(string fileName);
+	//将fileName文件译码并将保存译码文件
+	void decode(string fileName);                                      
+	//将生成的HuffmanTree写入到hfmTree.txt文件
+	void save(); 
+	//检测哈夫曼树是否为空
+	bool isEmpty() { return root == 0; }
+	//统计wpl，wpl是所有非叶子结点的权值之和
+	void setWpl(HuffmanNode* root);
+	//功能是对HuffmanTree的每个叶子结点进行编码
+	void encode(HuffmanNode* root, string s);
+	//编写codes[]字符串数组的内容
+	void setCodeArray(HuffmanNode* root);
+	//子函数，功能是统计文章中各字符出现次数并显示
+	void countTimes();
+	//画出huffman树
+	void displayHuffman();
+private:
+	//子函数，辅助打印生成的HuffmanTree
+	void displayHuffman(HuffmanNode* root, int ident, ofstream& out);
+	//子函数，后序遍历删除树结点
+	void deleteTree(HuffmanNode* root);
+};
+
+//////////////////////////////
+//接下来是HuffmanTree类的实现
+/////////////////////////////
+
+//函数功能：后序遍历方式释放二叉树空间
+//函数参数：HuffmanTree的根结点root
+//返回值：void
+void HuffmanTree::deleteTree(HuffmanNode* root)
+{
+	if (root == 0)return;
+	else
+	{
+		deleteTree(root->leftChild);
+		deleteTree(root->rightChild);
+		delete root;
+	}
+}
+
+//函数功能：构造函数，初始化各类数据
+//函数参数：无
+//返回值：无
+HuffmanTree::HuffmanTree()
+{
+	codes = 0;
+	times = 0;
+	root = 0;
+	typeNum = 0;
+	keys = 0;
+	wpl = 0;
+}
+
+
+//函数功能：根据已有数组，建立HuffmanTree，并建立结构体数组用于存储字符和出现次数的信息
+//函数参数：存储各字符出现频率的数组w，存储字符种类的数组keys，以及字符种类总数n
+//返回值：void
+void HuffmanTree::createTree(char keys[], unsigned short w[], int n)
+{
+	MyHeap<HuffmanNode>heap1;
+	HuffmanNode* parent = 0, * first, * second, * work, temp;
+	for (int i = 0; i < n; i++)//逐个插入最小堆
+	{
+		work = new HuffmanNode();
+		work->leftChild = NULL;//一定记得初始化！！
+		work->rightChild = NULL;
+		work->parent = work;
+		work->key = keys[i];
+		work->times = w[i];
+		heap1.Insert(*work);
+	}
+	//执行n-1次操作，以建立哈夫曼树
+	for (int i = 1; i <= n - 1; i++)
+	{
+		heap1.Remove(temp);
+		first = temp.parent;
+		heap1.Remove(temp);
+		second = temp.parent;
+		mergeTree(first, second, parent);//合并
+		heap1.Insert(*parent);//新节点插入堆中
+	}
+	root = parent;
+}
+
+//函数功能：将两棵树合成一棵树
+//函数参数：两棵树的根结点bt1,bt2,以及新树的根结点parent
+//返回值：void
+void HuffmanTree::mergeTree(HuffmanNode* bt1, HuffmanNode* bt2, HuffmanNode*& parent)
+{
+	parent = new HuffmanNode;
+	parent->leftChild = bt1;
+	parent->rightChild = bt2;
+	parent->parent = parent;
+	parent->times = bt1->times + bt2->times;
+	parent->key = '\0';//不是叶子结点的值设置成'\0'
+	bt1->parent = bt2->parent = parent;
+}
+
+//函数功能：前序遍历递归计算wpl
+//函数参数：根结点root
+//返回值：void
+void HuffmanTree::setWpl(HuffmanNode*root)
+{
+	if (!root)return;
+	else
+	{
+		if (root->leftChild != 0 || root->rightChild != 0)//判断是否为叶子结点
+			wpl += root->times;//wpl值是所有非叶子结点权值之和
+		setWpl(root->leftChild);
+		setWpl(root->rightChild);
+	}
+}
+
+//函数功能：对HuffmanTree的叶子结点进行编码，规定往左走加'0'，往右走加‘1’
+//函数参数：HuffmanTree的根结点root，以及当前的编码s
+//返回值：void
+void HuffmanTree::encode(HuffmanNode* root, string s)
+{
+	if (root == NULL)
+		return;
+	//先访问左子树
+	//s需要加上'0'
+	s = s + '0';
+	if (root->leftChild != NULL)
+	{
+		root->leftChild->code = s;
+	}
+	encode(root->leftChild, s);//遍历左子树
+	//往右走之前，先把最后一个编码换成1
+	s[s.size() - 1] = '1';
+	if (root->rightChild != NULL)
+		root->rightChild->code = s;
+	encode(root->rightChild, s);//遍历右子树
+}
+
+//函数功能：根据哈夫曼树叶子结点的编码，设置codes[]字符串数组的内容
+//函数参数：根结点root
+//返回值：void
+void HuffmanTree::setCodeArray(HuffmanNode* root)
+{
+	if (root == 0)return;
+	if (root->leftChild == 0 && root->rightChild == 0)
+	{
+		for (int i = 0; i < typeNum; i++)//找到对应的编号
+			if (keys[i] == root->key)codes[i] = root->code;
+	}
+	setCodeArray(root->leftChild);
+	setCodeArray(root->rightChild);
+}
+
+//函数功能：将生成的HuffmanTree存入hfmTree.txt文件
+//          实际上存储的是每个字符以及字符出现的次数
+//函数参数：无
+//返回值：void
+void HuffmanTree::save()
+{
+	ofstream out("hfmTree.txt", ios::binary);
+	if (!out)
+	{
+		cout << "文件打开失败！" << endl;
+		return;
+	}
+	//先写入种类数
+	out.write((char*)&typeNum, sizeof(short));
+	//写入各字符和频度
+	for (int i = 0; i < typeNum; i++)
+	{
+		out.write((char*)&keys[i], sizeof(keys[i]));
+		out.write((char*)&times[i], sizeof(times[i]));
+	}
+	out.close();
+}
+
+
+//函数功能：将文件编码并将编码结果写入到CodeFile.txt文件
+//函数参数：无
+//返回值：void
+void HuffmanTree::encoding(string fileName)
+{
+	//建立字符数组临时存储二进制编码
+	char* binaryCode = new char[wpl];
+	//初始元素设置为\0
+	memset(binaryCode, '\0', sizeof(binaryCode));
+	ofstream out("CodeFile.txt", ios::binary);
+	ifstream in(fileName, ios::in);
+	if (!in || !out)
+	{
+		cout << "打开文件失败！" << endl;
+		return;
+	}
+	char c;//从文件读出来的字符
+	//字符数组下标标记
+	int flag = 0;
+	while (in.peek() != EOF)
+	{
+		c = in.get();
+		//找到c字符对应codes数组的哪个下标
+		for(int u=0;u<typeNum;u++)
+		{
+			if (keys[u] == c)//找到
+			{
+				for (int i = 0; i < codes[u].length(); i++)//将c的编码写到binaryCode中
+				{
+					binaryCode[flag] = codes[u][i];
+					flag++;
+				}
+				break;
+			}
+		}
+	}
+	out.write((char*)&flag, sizeof(flag));
+	//接下来开始转化成十进制并写入文件
+	//此处的flag是二进制串的总长度
+	short num = 0;
+	int i = 0;
+	for (i = 0; i < flag-flag%8; i++)
+	{
+		if(binaryCode[i]=='1')
+			num += pow(2, 7 - i % 8);
+		if ((i + 1) % 8 == 0)
+		{
+			unsigned char c = num;//因为num的最大值是255，用unsigned char即可存储，可以节约存储空间，提升压缩率
+			out.write((char*)&c,sizeof(c));
+			num = 0;
+		}
+	}
+	int temp = 128;
+	for (i = flag-flag%8; i < flag ; i++)
+	{
+		num += (binaryCode[i]-'0')*temp;
+		temp = temp / 2;
+	}
+	unsigned char numToWrite = num;
+	out.write((char*)&numToWrite, sizeof(numToWrite));
+	out.close();
+	in.close();
+	cout << "编码已经写入文件CodeFile.txt！" << endl;
+}
+
+//函数功能：将编码好的文件译码并将译码结果写入到CodeFile.txt文件
+//函数参数：无
+//返回值：void
+void HuffmanTree::decode(string fileName)
+{
+	ifstream in(fileName, ios::binary);
+	if (!in)
+	{
+		cout << "请先初始化哈夫曼树!" << endl;
+		return;
+	}
+	char* binaryCode = new char[wpl];
+	memset(binaryCode, '\0', sizeof(binaryCode));
+	short num;//存储读进来的十进制数
+	unsigned char c;
+	int flag = 0;//字符数组下标
+	int WPL;
+	in.read((char*)&WPL, sizeof(WPL));
+	//将读取进来的十进制数转成二进制并存入binaryCode数组
+	for (int i = 1; i <= WPL / 8; i++)
+	{
+		in.read((char*)&c, sizeof(c));
+		num = c;
+		int temp = 128;
+		for (int i = 0; i < 8; i++, flag++)
+		{
+			if (num >= temp)
+			{
+				num = num - temp;
+				binaryCode[flag] = '1';
+			}
+			else
+				binaryCode[flag] = '0';
+			temp = temp / 2;
+		}
+	}
+	//对最后一个十进制数是否译码为8为二进制数的判断
+	if (WPL % 8 != 0)
+	{
+		in.read((char*)&c, sizeof(c));
+		num = c;
+		int temp = 128;
+		for (int i = 0; i < WPL % 8; i++, flag++)
+		{
+			if (num >= temp)
+			{
+				num = num - temp;
+				binaryCode[flag] = '1';
+			}
+			else
+				binaryCode[flag] = '0';
+			temp = temp / 2;
+		}
+	}
+	//接下来对文件写入译码结果
+	HuffmanNode* current = root;
+	ofstream out("TextFile.txt", ios::out);
+	if (!out)
+	{
+		cout << "文件打开失败！" << endl;
+		return;
+	}
+	for (int i = 0; i < WPL; i++)
+	{
+		char c = binaryCode[i];
+		if (c == '0')
+		{
+			current = current->leftChild;
+		}
+		else if (c == '1')
+		{
+			current = current->rightChild;
+		}
+		if (current->leftChild == NULL && current->rightChild == NULL)
+		{
+			c = current->key;
+			out.write((char*)&c, sizeof(char));
+			current = root;//复位，从树根开始往下走
+		}
+	}
+	in.close();
+	out.close();
+	cout << "译码文件已经存入TextFile文件中！";
+	cout << endl << endl;
+}
+
+//函数功能：绘制生成的huffman树并写入文件
+//函数参数：无
+//返回值：void
+void HuffmanTree::displayHuffman()
+{
+	ofstream out("TreePrin.txt", ios::out);
+	if (!out)
+	{
+		cout << "文件打开失败！" << endl;
+		return;
+	}
+	displayHuffman(root, 0, out);
+	out.close();
+}
+
+//函数功能：子函数打印生成的HuffmanTree
+//函数参数：根结点root，数组下标ident
+int vec_left[100] = { 0 };
+void HuffmanTree::displayHuffman(HuffmanNode* root, int ident,ofstream&out)
+{
+	if (ident > 0)
+	{
+		for (int i = 0; i < ident - 1; ++i)
+		{
+			cout<<(vec_left[i] ? "│   " : "    ");//输出到屏幕
+			out << (vec_left[i] ? "│   " : "    ");//输出到文件
+		}
+		cout<<(vec_left[ident - 1] ? "├── " : "└── ");
+		out << (vec_left[ident - 1] ? "├── " : "└── ");
+	}
+	if (!root)
+	{
+		cout<<"(null)"<<endl;
+		out << "(null)"<<endl;
+		return;
+	}
+	if (root->key == '\0')//非叶子结点的关键字默认输出\0
+	{
+		cout << "\\0" << endl;
+		out << "\\0" << endl;
+	}
+	else
+	{
+		cout << root->key << endl;
+		out << root->key << endl;
+	}
+	if (!root->leftChild && !root->rightChild)
+	{
+		return;
+	}
+	vec_left[ident] = 1;
+	displayHuffman(root->leftChild, ident + 1,out);//遍历左子树
+	vec_left[ident] = 0;
+	displayHuffman(root->rightChild, ident + 1,out);//遍历右子树
+}
+
+////函数功能：统计文章中的字符出现的种类数和频率
+//函数参数：无
+//返回值：无
+void HuffmanTree::countTimes()
+{
+	int counts[128];
+	memset(counts, 0, sizeof(counts));
+	cout << "请输入要统计的文章名称" << endl;
+	string fileName;
+	cin >> fileName;
+	ifstream in(fileName, ios::in);
+	if (!in)
+	{
+		cout << "文件打开失败！";
+		return;
+	}
+	char c;
+	while (in.peek() != EOF)
+	{
+		c=in.get(); //读入一个字符
+		counts[c - '\0']++;
+	}
+	int num = 0;//统计出现的字符种类
+	for (int i = 31; i <128; i++)
+	{
+		if (counts[i] != 0)
+		{
+			c = i - 0;
+			cout << c << " " << counts[i] << " " << endl;
+			num++;
+		}
+	}
+	cout << "字符集格个数为" << num << endl;
+	cout << "(默认不统计非英文字符和除空格外的不可见字符)" << endl;
+	in.close();
+}
+#endif
+//文件名：myHeap.h
+//功能：  最小堆的定义
+//作者：  邓智超
+//修改时间：2020.12.25
+#ifndef _MYHEAP_H_
+#define _MYHEAP_H_
+#pragma once
+#include<iostream>
+using namespace std;
+//声明最小堆的最大结点树，此处设置为130
+const int DefaultSize =130;
+
+//////////////////////////////
+//接下来是最小堆myHeap类的定义
+//////////////////////////////
+
+template<class T>
+class MyHeap
+{
+	//heap数组
+	T* heap;
+	//当前元素数量
+	int currentSize;
+	//最大元素数量
+	int maxHeapSize;
+public:
+	//缺省构造函数
+	MyHeap(int sz = DefaultSize);
+	//由数组生成最小堆
+	MyHeap(T arr[], int n);
+	//析构函数
+	~MyHeap() { delete[]heap; }
+	//最小堆插入算法
+	bool Insert(T& x);
+	//最小堆删除算法
+	bool Remove(T& x);
+	//判断堆是否为空
+	bool IsEmpty()const
+	{
+		return currentSize == 0;
+	}
+	//判断堆是否已满
+	bool IsFull()const
+	{
+		return currentSize == maxHeapSize;
+	}
+	//清空堆
+	void MakeEmpty()
+	{
+		currentSize = 0;
+	}
+private:
+	//最小堆向下调整算法
+	void siftDown(int start, int m);
+	//最小堆向上调整算法
+	void siftUp(int start);
+};
+
+///////////////////////////////
+//接下来是最小堆myHeap类的实现
+//////////////////////////////
+//构造函数，根据给定大小maxSize，建立堆对象
+
+//函数功能：创建堆数组，执行初始化操作
+//函数参数：数组大小sz
+//返回值：无
+template<class T>
+MyHeap<T>::MyHeap(int sz)
+{
+	maxHeapSize = (DefaultSize < sz) ? sz : DefaultSize;
+	heap = new T[maxHeapSize];//创建堆数组
+	currentSize = 0;
+}
+
+//函数功能：构造函数，由已有数组建立堆对象
+//函数参数：包含字符出现次数的数组arr，数组长度n
+//返回值：无
+template <class T>
+MyHeap<T>::MyHeap(T arr[], int n)
+{
+	maxHeapSize = (DefaultSize < n) ? n : DefaultSize;
+	heap = new T[maxHeapSize];
+	//对数组赋值
+	for (int i = 0; i < n; i++)
+	{
+		heap[i] = arr[i];
+	}
+	//对数组进行调整，使之成为最小堆
+	currentSize = n;
+	int currentPos = (currentSize - 2) / 2;//最后非叶子结点
+	while (currentPos >= 0)
+	{	
+		//从currentPos调整到currentSize
+		siftDown(currentPos, currentSize - 1); 
+		currentPos--;						  
+	}
+}
+
+//函数功能：最小堆插入算法，将元素x插入最小堆
+//函数参数：要插入堆的元素x
+//返回值：逻辑值true或false
+template <class T>
+bool MyHeap<T>::Insert(T& x)
+{
+	//若堆已满
+	if (currentSize == maxHeapSize)
+	{ 
+		cout << "堆已满！" << endl;
+		return false;
+	}
+	//未满
+	heap[currentSize] = x;
+	siftUp(currentSize);   //向上调整
+	currentSize++;		   //当前元素数加1
+	return true;
+}
+
+//函数功能：最小堆删除算法，删除堆顶元素
+//函数参数：将堆顶元素赋值给x
+//返回值：逻辑值true或false
+template <class T>
+bool MyHeap<T>::Remove(T& x)
+{
+	//若堆为空
+	if (!currentSize)
+	{ 
+		cout << "堆为空" << endl;
+		return false;
+	}
+	//堆不空
+	x = heap[0];					 // 返回最小元素
+	heap[0] = heap[currentSize - 1]; //最后元素填补到根结点
+	currentSize--;                   //当前元素数减1
+	siftDown(0, currentSize - 1); //自上向下调整为堆
+	return true;
+}
+
+//函数功能：最小堆向下调整算法
+//函数参数：起点位置start，终点位置m
+//返回值：无
+template<class T>
+void MyHeap<T>::siftDown(int start, int m)
+{
+	int i = start, j = 2 * i + 1;
+	T temp = heap[i];
+	while (j <= m)
+	{
+		//两子女选小的
+		if (j<m && heap[j]>heap[j + 1])
+			j++;
+		if (temp <= heap[j])break;
+		else
+		{
+			heap[i] = heap[j];
+			i = j;
+			j = 2 * j + 1;//往下走
+		}
+	}
+	heap[i] = temp;
+} 
+
+//函数功能：最小堆向上调整算法
+//函数参数：起点位置start
+//返回值：无
+template<class T>
+void MyHeap<T>::siftUp(int start)
+{
+	//从start开始向上调整到0
+	int j = start, i = (j - 1) / 2;//i是j的双亲
+	T temp = heap[j];
+	while (j > 0)
+	{
+		if (heap[i] <= temp)break;
+		else
+		{
+			heap[j] = heap[i];
+			j = i;
+			i = (i - 1) / 2;//往上走
+		}
+	}
+	heap[j] = temp;
+}
+#endif
+#include<iostream>
+#include"HuffmanNode.H"
+using namespace std;
+
+void menu()
+{
+	cout << "---------文本压缩与解压---------" << endl;
+	cout << "0---统计文章字符种类和频度" << endl;
+	cout << "1---初始化(Initialization)" << endl;
+	cout << "2---编码(Encoding)" << endl;
+	cout << "3---译码(Decoding)" << endl;
+	cout << "4---打印代码文件(Print)" << endl;
+	cout << "5---打印哈夫曼树(TreePrinting)" << endl;
+	cout << "6---退出(Exit)" << endl;
+}
+//函数指针数组的内容
+//利用函数指针数组，避免使用了switch结构来实现相应函数的调用，提升效率
+void func0(HuffmanTree &myTree);//统计
+void func1(HuffmanTree &myTree);//初始化
+void func2(HuffmanTree &myTree);//编码
+void func3(HuffmanTree &myTree);//译码
+void func4(HuffmanTree &myTree);//打印代码文件
+void func5(HuffmanTree &myTree);//打印哈夫曼树
+void func6(HuffmanTree& myTree);//退出
+
+//函数指针数组，用于根据用户输入调用对应函数
+void(*functionPointer[7])(HuffmanTree &myTree) = { func0,func1,func2,func3,func4,func5,func6 };
+
+int main()
+{
+	int input;
+	menu();
+	cin >> input;
+	HuffmanTree myTree;
+	while (true)
+	{
+		if (input >= 0 && input <= 6)
+		{
+			(*functionPointer[input])(myTree);//调用对应函数
+			menu();//显示菜单
+		}
+		else
+			cout << "请输入正确的指令！" << endl;
+		cin >> input;
+	}
+	return 0;
+}
+
+////////////////////////////////
+//接下来是func0-func6的函数实现
+///////////////////////////////
+
+//函数功能：统计文章中字符出现的种类和次数
+//函数参数：HuffmanTree类对象myTree
+//返回值：void
+void func0(HuffmanTree& myTree)
+{
+	myTree.countTimes();
+}
+
+//函数功能：执行初始化操作
+//函数参数：HuffmanTree类对象myTree
+//返回值：void
+void func1(HuffmanTree &myTree)
+{
+	unsigned short num,times;
+	char c;
+	cout << "请输入字符集的个数" << endl;
+	cin >> num;
+	myTree.keys = new char[num+1];
+	myTree.times = new unsigned short[num];
+	myTree.codes = new string[num];
+	
+	for (int i = 0; i < num; i++)
+	{
+		cout << "请输入第"<<i+1<<"个字符" << endl;
+		getchar();//去掉\n和\t
+		myTree.keys[i] = getchar();
+		cout << "请输入该字符的频度" << endl;
+		getchar();//去掉\n和\t
+		cin >> myTree.times[i];
+	}
+	myTree.typeNum = num;//字符种类数
+	myTree.createTree(myTree.keys, myTree.times, num);//建立树
+	myTree.setWpl(myTree.root);//统计wpl
+	myTree.encode(myTree.root,"");//对每个字符进行相应的编码
+	myTree.setCodeArray(myTree.root);
+	myTree.save();//保存
+}
+
+
+//函数功能：执行编码操作
+//函数参数：HuffmanTree类对象myTree
+//返回值：void
+void func2(HuffmanTree &myTree)
+{
+	if (myTree.isEmpty())
+	{
+		ifstream in("hfmTree.txt", ios::binary);
+		if (!in)
+		{
+			cout << "请先初始化哈夫曼树！" << endl;
+			return;
+		}
+		//先读入种类数
+		in.read((char*)&myTree.typeNum, sizeof(myTree.typeNum));
+		myTree.keys = new char[myTree.typeNum + 1];
+		myTree.times = new unsigned short[myTree.typeNum];
+		myTree.codes = new string[myTree.typeNum];
+		//接着读入字符和频度
+		for (int i = 0; i < myTree.typeNum; i++)
+		{
+			in.read((char*)&myTree.keys[i], sizeof(myTree.keys[i]));
+			in.read((char*)&myTree.times[i], sizeof(myTree.times[i]));
+		}
+		myTree.createTree(myTree.keys, myTree.times, myTree.typeNum);//建立树
+		myTree.setWpl(myTree.root);//统计wpl
+		myTree.encode(myTree.root, "");//对每个字符进行相应的编码
+		myTree.setCodeArray(myTree.root);
+		myTree.save();//保存
+	}
+	//接下来开始编码
+	string fileName;
+	cout << "请输入你要编码的文件名" << endl;
+	cin >> fileName;
+	myTree.encoding(fileName);
+
+}
+
+//函数功能：执行译码操作
+//函数参数：HuffmanTree类对象myTree
+//返回值：void
+void func3(HuffmanTree &myTree)
+{
+	if (myTree.isEmpty())
+	{
+		ifstream in("hfmTree.txt", ios::binary);
+		if (!in)
+		{
+			cout << "请先初始化哈夫曼树！" << endl;
+			return;
+		}
+		//先读入种类数
+		in.read((char*)&myTree.typeNum, sizeof(myTree.typeNum));
+		//开始建立哈夫曼树
+		myTree.keys = new char[myTree.typeNum + 1];
+		myTree.times = new unsigned short[myTree.typeNum];
+		myTree.codes = new string[myTree.typeNum];
+		//先读入字符和频度
+		for (int i = 0; i < myTree.typeNum; i++)
+		{
+			in.read((char*)&myTree.keys[i], sizeof(myTree.keys[i]));
+			in.read((char*)&myTree.times[i], sizeof(myTree.times[i]));
+		}
+		myTree.createTree(myTree.keys, myTree.times, myTree.typeNum);//建立树
+		myTree.setWpl(myTree.root);//统计wpl
+		myTree.encode(myTree.root, "");//对每个字符进行相应的编码
+		myTree.setCodeArray(myTree.root);//对编码数组codes[]进行赋值，以便后续操作
+		myTree.save();//保存
+	}
+	//接下来开始解码
+	cout << "请输入要解码的文件名称" << endl;
+	string fileName;
+	cin >> fileName;
+	myTree.decode(fileName);
+}
+
+
+//函数功能：输出并存储二进制码操作
+//函数参数：HuffmanTree类对象myTree
+//返回值：void
+void func4(HuffmanTree &myTree)
+{
+	//为省去建树的时间，考虑将wpl直接写入文件，则读取时可不依赖Huffman树即可输出二进制码
+	string fileName;
+	cout << "请输入要显示二进制码的文件名" << endl;
+	cin >> fileName;
+	ifstream in(fileName, ios::binary);
+	ofstream out("CodePrin.txt", ios::out);
+	if (!in||!out)
+	{
+		cout << "文件打开失败" << endl;
+		return;
+	}
+	int wpl;
+	in.read((char*)&wpl, sizeof(int));
+	unsigned char c;
+	int temp=0;//计数器
+	//将读入的十进制数转换成01二进制代码
+	for (int i = 0; i < wpl / 8; i++)
+	{
+		in.read((char*)&c, sizeof(c));
+		int num = c;
+		for (int i = 8; i > 0; i--)
+		{
+			if (c & (1 << i))
+			{
+				cout << "1";
+				out << '1';
+			}
+			else
+			{
+				cout << "0";
+				out << '0';
+			}
+			temp++;
+			if (temp % 50 == 0)//保证每行50个
+			{
+				cout << endl;
+				out << endl;
+			}
+		}
+	}
+	//对最后一位十进制数是否转成8位二进制代码的处理
+	if (wpl % 8 != 0)
+	{
+		in.read((char*)&c, sizeof(c));
+		int num = c;
+		for (int i = wpl%8; i > 0; i--)
+		{
+			if (c & (1 << i))
+			{
+				cout << "1";
+				out << '1';
+			}
+			else
+			{
+				cout << "0";
+				out << '0';
+			}
+			temp++;
+			if (temp % 50 == 0)//保证每行50个
+			{
+				cout << endl;
+				out << endl;
+			}
+		}
+	}
+	cout << endl;
+}
+
+//函数功能：打印并存储huffman树
+//函数参数：HuffmanTree类对象myTree
+//返回值：void
+void func5(HuffmanTree &myTree)
+{
+	if (myTree.isEmpty())
+	{
+		ifstream in("hfmTree.txt", ios::binary);
+		if (!in)
+		{
+			cout << "请先初始化哈夫曼树！" << endl;
+			return;
+		}
+		//先读入种类数
+		in.read((char*)&myTree.typeNum, sizeof(myTree.typeNum));
+		myTree.keys = new char[myTree.typeNum + 1];
+		myTree.times = new unsigned short[myTree.typeNum];
+		myTree.codes = new string[myTree.typeNum];
+		//接着读入字符和频度
+		for (int i = 0; i < myTree.typeNum; i++)
+		{
+			in.read((char*)&myTree.keys[i], sizeof(myTree.keys[i]));
+			in.read((char*)&myTree.times[i], sizeof(myTree.times[i]));
+		}
+		myTree.createTree(myTree.keys, myTree.times, myTree.typeNum);//建立树
+		myTree.setWpl(myTree.root);//统计wpl
+		myTree.encode(myTree.root, "");//对每个字符进行相应的编码
+		myTree.setCodeArray(myTree.root);
+		myTree.save();//保存
+		myTree.displayHuffman();
+	}
+	else
+		myTree.displayHuffman();
+	cout << "哈夫曼树已经写入文件TreePrin.txt，非叶子结点的关键字默认显示\\0" << endl << endl;
+}
+
+//函数功能：退出程序
+//函数参数：HuffmanTree类对象myTree
+//返回值：void
+void func6(HuffmanTree &myTree)
+{
+	cout << "祝您生活愉快，再见！" << endl;
+	exit(0);
+}
